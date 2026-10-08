@@ -3,17 +3,24 @@
 //   2. Batch fast path: skips clean sprites in CCSpriteBatchNode::draw (self-verifying)
 //   3. Optional updateVisibility throttle (experimental)
 //   4. Optional debug log (off by default, zero hot-path cost when off)
+//   5. Decoupled display (v1.1.0): game update runs every loop iteration, but the
+//      scene is only drawn/presented at the monitor refresh rate. Physics is NOT touched.
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/CCDirector.hpp>
 #include <Geode/modify/CCSpriteBatchNode.hpp>
+#include <Geode/modify/CCScheduler.hpp>
+#include <Geode/modify/CCEGLView.hpp>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#ifdef GEODE_IS_WINDOWS
+#include <Windows.h>
+#endif
 
 using namespace geode::prelude;
 using clk = std::chrono::steady_clock;
@@ -27,6 +34,9 @@ namespace cfg {
     static std::atomic<bool> debug{false};
     static std::atomic<double> visThrottleMs{0.0};
     static std::atomic<double> camDelta{20.0};
+    static std::atomic<bool> decoupled{false};
+    static std::atomic<int64_t> displayHz{0};   // 0 = auto-detect
+    static std::atomic<int64_t> logicFps{0};    // 0 = unlimited
 }
 
 // ---------------------------------------------------------------------------
@@ -46,6 +56,7 @@ namespace dbg {
 
     static double fbLoopMs = 0;             // time spent in the batch child loop
     static int64_t fbDraws = 0, fbNodes = 0, fbSkipped = 0;
+    static int presented = 0;               // frames actually drawn+swapped (decoupled mode)
     static int visRan = 0, visSkipped = 0, visForcedToggle = 0, visForcedCam = 0;
 
     // Physics checksum: hash of player positions per step. Run the same macro with
@@ -67,14 +78,16 @@ namespace dbg {
         double wall = std::chrono::duration<double, std::milli>(now - lastReport).count();
         lastReport = now;
 
-        log::info("FPS {:.0f} | frame avg {:.2f} max {:.2f} ms | fast-batch {} draws, {}/{} nodes skipped ({:.1f}%), loop {:.2f}% of wall | vis-throttle ran {} skipped {} forced(toggle/camera) {}/{}",
+        log::info("FPS {:.0f} | frame avg {:.2f} max {:.2f} ms | fast-batch {} draws, {}/{} nodes skipped ({:.1f}%), loop {:.2f}% of wall | vis-throttle ran {} skipped {} forced(toggle/camera) {}/{} | present {:.0f}/s",
             1000.0 / std::max(frame.avg(), 0.001), frame.avg(), frame.mx,
             fbDraws, fbSkipped, fbNodes, fbNodes ? 100.0 * fbSkipped / fbNodes : 0.0,
             fbLoopMs / wall * 100.0,
-            visRan, visSkipped, visForcedToggle, visForcedCam);
+            visRan, visSkipped, visForcedToggle, visForcedCam,
+            presented * 1000.0 / wall);
 
         frame.reset(); fbLoopMs = 0; fbDraws = fbNodes = fbSkipped = 0;
         visRan = visSkipped = visForcedToggle = visForcedCam = 0;
+        presented = 0;
     }
 }
 
@@ -228,9 +241,59 @@ class $modify(FGPlayLayer, PlayLayer) {
 };
 
 // ---------------------------------------------------------------------------
-// Unlimited FPS
-//   ON : animation interval -> ~0 and VSync off.
-//   OFF: animation interval restored to whatever GD had before we touched it.
+// Decoupled display
+//   Logic (CCScheduler::update -> PlayLayer -> GD's own 240 TPS physics) runs on every
+//   loop iteration. The scene visit + buffer swap only happen when a present is due
+//   (monitor refresh rate). Physics code is not hooked or modified; GD derives its
+//   step count from the frame delta exactly as it does with plain unlimited FPS.
+//   Skipped frames hide the running scene (setVisible(false)) so CCNode::visit is a
+//   no-op, and CCEGLView::swapBuffers is suppressed.
+// ---------------------------------------------------------------------------
+namespace dec {
+    static clk::time_point nextPresent = clk::now();
+    static clk::duration interval = std::chrono::milliseconds(16);
+    static bool skipSwap = false;
+
+    static double detectHz() {
+#ifdef GEODE_IS_WINDOWS
+        DEVMODEW dm{};
+        dm.dmSize = sizeof(dm);
+        if (EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency > 1)
+            return static_cast<double>(dm.dmDisplayFrequency);
+#endif
+        return 60.0;
+    }
+
+    static void refresh() {
+        int64_t hz = cfg::displayHz.load();
+        double h = hz > 0 ? static_cast<double>(hz) : detectHz();
+        interval = std::chrono::duration_cast<clk::duration>(std::chrono::duration<double>(1.0 / h));
+        nextPresent = clk::now();
+        log::info("[decoupled] present interval {:.3f} ms ({:.0f} Hz{})",
+            1000.0 / h, h, hz > 0 ? "" : ", auto-detected");
+    }
+
+    // true when the scene should be drawn and presented on this loop iteration
+    static bool due() {
+        auto now = clk::now();
+        if (now < nextPresent) return false;
+        nextPresent += interval;
+        if (nextPresent <= now) nextPresent = now + interval;  // fell behind: resync
+        return true;
+    }
+}
+
+class $modify(FGView, CCEGLView) {
+    void swapBuffers() {
+        if (dec::skipSwap) return;
+        CCEGLView::swapBuffers();
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Unlimited FPS / decoupled loop rate
+//   Unlimited ON, or decoupled ON: animation interval -> logic cap (or ~0) and VSync off.
+//   Both OFF: animation interval restored to whatever GD had before we touched it.
 //   (VSync is not restored at runtime; restart the game to get GD's own VSync setting back.)
 // ---------------------------------------------------------------------------
 namespace fps {
@@ -239,11 +302,22 @@ namespace fps {
     static double origInterval = 1.0 / 60.0;
     static constexpr double kUnlimited = 1.0 / 1000000.0;
 
+    static bool overriding() { return cfg::decoupled.load() || cfg::unlimitedFps.load(); }
+
+    static double desired() {
+        if (cfg::decoupled.load()) {
+            int64_t cap = cfg::logicFps.load();
+            if (cap > 0) return 1.0 / static_cast<double>(cap);
+        }
+        return kUnlimited;
+    }
+
     static void apply(CCDirector* dir) {
         auto app = CCApplication::sharedApplication();
-        if (cfg::unlimitedFps.load()) {
-            dir->setAnimationInterval(kUnlimited);
-            if (app) { app->setAnimationInterval(kUnlimited); app->toggleVerticalSync(false); }
+        if (overriding()) {
+            double d = desired();
+            dir->setAnimationInterval(d);
+            if (app) { app->setAnimationInterval(d); app->toggleVerticalSync(false); }
             applied = true;
         } else if (applied) {
             dir->setAnimationInterval(origInterval);
@@ -254,9 +328,10 @@ namespace fps {
 
     // GD can reset the interval (e.g. when its own settings change); re-assert it.
     static void enforce(CCDirector* dir) {
-        if (std::fabs(dir->getAnimationInterval() - kUnlimited) > kUnlimited * 1e-3) {
-            dir->setAnimationInterval(kUnlimited);
-            if (auto app = CCApplication::sharedApplication()) app->setAnimationInterval(kUnlimited);
+        double d = desired();
+        if (std::fabs(dir->getAnimationInterval() - d) > d * 1e-3) {
+            dir->setAnimationInterval(d);
+            if (auto app = CCApplication::sharedApplication()) app->setAnimationInterval(d);
         }
     }
 }
@@ -268,12 +343,19 @@ $on_mod(Loaded) {
     cfg::debug        = mod->getSettingValue<bool>("debug-log");
     cfg::visThrottleMs = mod->getSettingValue<double>("vis-throttle-ms");
     cfg::camDelta      = mod->getSettingValue<double>("vis-camera-delta");
+    cfg::decoupled     = mod->getSettingValue<bool>("decoupled-mode");
+    cfg::displayHz     = mod->getSettingValue<int64_t>("display-hz");
+    cfg::logicFps      = mod->getSettingValue<int64_t>("logic-fps");
+    dec::refresh();
 
     listenForSettingChanges<bool>("unlimited-fps", [](bool v) { cfg::unlimitedFps = v; fps::dirty = true; });
     listenForSettingChanges<bool>("fast-batch", [](bool v) { cfg::fastBatch = v; });
     listenForSettingChanges<bool>("debug-log", [](bool v) { cfg::debug = v; });
     listenForSettingChanges<double>("vis-throttle-ms", [](double v) { cfg::visThrottleMs = v; vis::reset(); });
     listenForSettingChanges<double>("vis-camera-delta", [](double v) { cfg::camDelta = v; });
+    listenForSettingChanges<bool>("decoupled-mode", [](bool v) { cfg::decoupled = v; fps::dirty = true; dec::refresh(); });
+    listenForSettingChanges<int64_t>("display-hz", [](int64_t v) { cfg::displayHz = v; dec::refresh(); });
+    listenForSettingChanges<int64_t>("logic-fps", [](int64_t v) { cfg::logicFps = v; fps::dirty = true; });
 }
 
 class $modify(FGDirector, CCDirector) {
@@ -284,11 +366,31 @@ class $modify(FGDirector, CCDirector) {
         if (!fps::applied) fps::origInterval = this->getAnimationInterval();
 
         if (fps::dirty) { fps::dirty = false; fps::apply(this); }
-        else if (cfg::unlimitedFps.load() && ++frames % 120 == 0) fps::enforce(this);
+        else if (fps::overriding() && ++frames % 120 == 0) fps::enforce(this);
 
-        if (cfg::debug.load()) dbg::onFrame();
+        bool dbgOn = cfg::debug.load();
+        if (dbgOn) dbg::onFrame();
         else dbg::haveLast = false;
 
+        if (!cfg::decoupled.load()) {
+            CCDirector::drawScene();
+            return;
+        }
+
+        // Decoupled: update every iteration (GD's own delta + physics path), draw only when due.
+        CCScene* scene = this->getRunningScene();
+        if (!dec::due() && scene) {
+            scene->retain();                 // the update may replace the scene
+            scene->setVisible(false);        // CCNode::visit becomes a no-op
+            dec::skipSwap = true;
+            CCDirector::drawScene();         // calculateDeltaTime + scheduler update + (empty) draw
+            dec::skipSwap = false;
+            scene->setVisible(true);
+            scene->release();
+            return;
+        }
+
+        if (dbgOn) dbg::presented++;
         CCDirector::drawScene();
     }
 };

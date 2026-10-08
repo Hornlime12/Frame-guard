@@ -3,7 +3,7 @@
     "gd": {
         "win": "2.2081"
     },
-    "version": "v1.0.1",
+    "version": "v1.1.0",
     "id": "hornlime1217.frame-guard",
     "name": "Frame Guard",
     "developer": "Hornlime1217",
@@ -14,6 +14,28 @@
             "name": "Unlimited FPS",
             "description": "Removes the FPS cap and turns VSync off. Off by default, so GD's own FPS limit applies. Turn it on if you want uncapped FPS (more CPU/GPU load and heat). After turning it off, restart the game to get VSync back.",
             "default": false
+        },
+        "decoupled-mode": {
+            "type": "bool",
+            "name": "Decoupled display (experimental)",
+            "description": "The game keeps updating every loop (physics is untouched), but the screen is only drawn at your monitor refresh rate. Turns VSync off and uses your Display Hz setting for pacing. Uses a lot of CPU unless you set a Logic FPS cap. Do not use together with other frame-pacing mods.",
+            "default": false
+        },
+        "display-hz": {
+            "type": "int",
+            "name": "Display Hz",
+            "description": "Draw rate for Decoupled display. 0 = auto-detect the primary monitor's refresh rate.",
+            "default": 0,
+            "min": 0,
+            "max": 1000
+        },
+        "logic-fps": {
+            "type": "int",
+            "name": "Logic FPS cap",
+            "description": "Update rate for Decoupled display. 0 = unlimited (uses a full CPU core). Setting a value such as 960 saves CPU but makes draw timing up to one logic frame late.",
+            "default": 0,
+            "min": 0,
+            "max": 10000
         },
         "fast-batch": {
             "type": "bool",
