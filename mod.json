@@ -4,7 +4,7 @@
         "win": "2.2081"
     },
     "version": "v1.0.0",
-    "id": "Hornlime1217.frame-guard",
+    "id": "hornlime1217.frame-guard",
     "name": "Frame Guard",
     "developer": "Hornlime1217",
     "description": "Defends your frame rate in heavy levels: unlimited FPS toggle and a self-verifying batch draw fast path.",
