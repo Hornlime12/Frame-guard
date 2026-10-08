@@ -1,3 +1,7 @@
+# v1.1.1
+- Decoupled display: new Draw budget setting. Slow draws in very heavy levels are spaced out so the game update no longer drops to the draw frame rate.
+- Debug log shows update-loop / present-loop times, estimated draw cost and how often a present was postponed.
+
 # v1.1.0
 - Added experimental Decoupled display: the game updates every loop (physics untouched) while the screen is drawn only at the monitor refresh rate. New settings: Decoupled display, Display Hz, Logic FPS cap.
 - Debug log now shows the present rate.

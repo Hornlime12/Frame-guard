@@ -3,7 +3,7 @@
     "gd": {
         "win": "2.2081"
     },
-    "version": "v1.1.0",
+    "version": "v1.1.1",
     "id": "hornlime1217.frame-guard",
     "name": "Frame Guard",
     "developer": "Hornlime1217",
@@ -36,6 +36,14 @@
             "default": 0,
             "min": 0,
             "max": 10000
+        },
+        "draw-budget": {
+            "type": "int",
+            "name": "Draw budget (%)",
+            "description": "Decoupled display only. Limits how much of the time drawing may use. In very heavy levels slow draws are spaced out so the game update (inputs, physics timing) keeps running fast instead of dropping to the draw rate. 0 = off. Lower = smoother game update but a lower on-screen frame rate in heavy levels.",
+            "default": 75,
+            "min": 0,
+            "max": 95
         },
         "fast-batch": {
             "type": "bool",

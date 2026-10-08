@@ -37,6 +37,7 @@ namespace cfg {
     static std::atomic<bool> decoupled{false};
     static std::atomic<int64_t> displayHz{0};   // 0 = auto-detect
     static std::atomic<int64_t> logicFps{0};    // 0 = unlimited
+    static std::atomic<int64_t> drawShare{75};  // max % of wall time drawing may take, 0 = off
 }
 
 // ---------------------------------------------------------------------------
@@ -56,6 +57,8 @@ namespace dbg {
 
     static double fbLoopMs = 0;             // time spent in the batch child loop
     static int64_t fbDraws = 0, fbNodes = 0, fbSkipped = 0;
+    static Acc updLoop, presLoop, drawEst;  // update-only loops, present loops, estimated draw cost (ms)
+    static int held = 0;                    // times a present was postponed by the draw budget
     static int presented = 0;               // frames actually drawn+swapped (decoupled mode)
     static int visRan = 0, visSkipped = 0, visForcedToggle = 0, visForcedCam = 0;
 
@@ -78,16 +81,18 @@ namespace dbg {
         double wall = std::chrono::duration<double, std::milli>(now - lastReport).count();
         lastReport = now;
 
-        log::info("FPS {:.0f} | frame avg {:.2f} max {:.2f} ms | fast-batch {} draws, {}/{} nodes skipped ({:.1f}%), loop {:.2f}% of wall | vis-throttle ran {} skipped {} forced(toggle/camera) {}/{} | present {:.0f}/s",
+        log::info("FPS {:.0f} | frame avg {:.2f} max {:.2f} ms | fast-batch {} draws, {}/{} nodes skipped ({:.1f}%), loop {:.2f}% of wall | vis-throttle ran {} skipped {} forced(toggle/camera) {}/{} | present {:.0f}/s | update-loop avg {:.2f} max {:.2f} ms | present-loop avg {:.2f} max {:.2f} ms | draw est avg {:.2f} max {:.2f} ms | budget-held {}",
             1000.0 / std::max(frame.avg(), 0.001), frame.avg(), frame.mx,
             fbDraws, fbSkipped, fbNodes, fbNodes ? 100.0 * fbSkipped / fbNodes : 0.0,
             fbLoopMs / wall * 100.0,
             visRan, visSkipped, visForcedToggle, visForcedCam,
-            presented * 1000.0 / wall);
+            presented * 1000.0 / wall,
+            updLoop.avg(), updLoop.mx, presLoop.avg(), presLoop.mx, drawEst.avg(), drawEst.mx, held);
 
         frame.reset(); fbLoopMs = 0; fbDraws = fbNodes = fbSkipped = 0;
         visRan = visSkipped = visForcedToggle = visForcedCam = 0;
-        presented = 0;
+        presented = 0; held = 0;
+        updLoop.reset(); presLoop.reset(); drawEst.reset();
     }
 }
 
@@ -253,6 +258,8 @@ namespace dec {
     static clk::time_point nextPresent = clk::now();
     static clk::duration interval = std::chrono::milliseconds(16);
     static bool skipSwap = false;
+    static clk::time_point holdUntil = clk::now();   // draw budget: no present before this
+    static double emaUpdMs = 0.0, emaDrawMs = 0.0;   // smoothed update-loop and draw cost
 
     static double detectHz() {
 #ifdef GEODE_IS_WINDOWS
@@ -268,7 +275,7 @@ namespace dec {
         int64_t hz = cfg::displayHz.load();
         double h = hz > 0 ? static_cast<double>(hz) : detectHz();
         interval = std::chrono::duration_cast<clk::duration>(std::chrono::duration<double>(1.0 / h));
-        nextPresent = clk::now();
+        nextPresent = holdUntil = clk::now();
         log::info("[decoupled] present interval {:.3f} ms ({:.0f} Hz{})",
             1000.0 / h, h, hz > 0 ? "" : ", auto-detected");
     }
@@ -276,10 +283,31 @@ namespace dec {
     // true when the scene should be drawn and presented on this loop iteration
     static bool due() {
         auto now = clk::now();
+        if (now < holdUntil) { if (cfg::debug.load()) dbg::held++; return false; }
         if (now < nextPresent) return false;
         nextPresent += interval;
         if (nextPresent <= now) nextPresent = now + interval;  // fell behind: resync
         return true;
+    }
+
+    // Called after every decoupled loop with its duration. A present loop is update + draw,
+    // so draw cost ~= present-loop time - typical update-loop time. If drawing would take
+    // more than the allowed share of wall time, postpone the next present so that update-only
+    // loops (and therefore input handling / physics cadence) are not dragged down by slow draws.
+    static void account(bool presented, double loopMs, clk::time_point end) {
+        constexpr double a = 0.2;
+        if (!presented) {
+            emaUpdMs = emaUpdMs == 0.0 ? loopMs : emaUpdMs * (1 - a) + loopMs * a;
+            return;
+        }
+        double draw = std::max(0.0, loopMs - emaUpdMs);
+        emaDrawMs = emaDrawMs == 0.0 ? draw : emaDrawMs * (1 - a) + draw * a;
+        if (cfg::debug.load()) dbg::drawEst.add(draw);
+
+        double share = static_cast<double>(cfg::drawShare.load()) / 100.0;
+        if (share <= 0.0 || share >= 1.0) return;
+        double gapMs = std::min(250.0, emaDrawMs * (1.0 - share) / share);
+        holdUntil = end + std::chrono::duration_cast<clk::duration>(std::chrono::duration<double, std::milli>(gapMs));
     }
 }
 
@@ -346,6 +374,7 @@ $on_mod(Loaded) {
     cfg::decoupled     = mod->getSettingValue<bool>("decoupled-mode");
     cfg::displayHz     = mod->getSettingValue<int64_t>("display-hz");
     cfg::logicFps      = mod->getSettingValue<int64_t>("logic-fps");
+    cfg::drawShare     = mod->getSettingValue<int64_t>("draw-budget");
     dec::refresh();
 
     listenForSettingChanges<bool>("unlimited-fps", [](bool v) { cfg::unlimitedFps = v; fps::dirty = true; });
@@ -355,6 +384,7 @@ $on_mod(Loaded) {
     listenForSettingChanges<double>("vis-camera-delta", [](double v) { cfg::camDelta = v; });
     listenForSettingChanges<bool>("decoupled-mode", [](bool v) { cfg::decoupled = v; fps::dirty = true; dec::refresh(); });
     listenForSettingChanges<int64_t>("display-hz", [](int64_t v) { cfg::displayHz = v; dec::refresh(); });
+    listenForSettingChanges<int64_t>("draw-budget", [](int64_t v) { cfg::drawShare = v; dec::holdUntil = clk::now(); });
     listenForSettingChanges<int64_t>("logic-fps", [](int64_t v) { cfg::logicFps = v; fps::dirty = true; });
 }
 
@@ -379,7 +409,10 @@ class $modify(FGDirector, CCDirector) {
 
         // Decoupled: update every iteration (GD's own delta + physics path), draw only when due.
         CCScene* scene = this->getRunningScene();
-        if (!dec::due() && scene) {
+        bool present = dec::due() || !scene;
+        auto t0 = clk::now();
+
+        if (!present) {
             scene->retain();                 // the update may replace the scene
             scene->setVisible(false);        // CCNode::visit becomes a no-op
             dec::skipSwap = true;
@@ -387,10 +420,14 @@ class $modify(FGDirector, CCDirector) {
             dec::skipSwap = false;
             scene->setVisible(true);
             scene->release();
-            return;
+        } else {
+            if (dbgOn) dbg::presented++;
+            CCDirector::drawScene();
         }
 
-        if (dbgOn) dbg::presented++;
-        CCDirector::drawScene();
+        auto t1 = clk::now();
+        double loopMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        if (dbgOn) (present ? dbg::presLoop : dbg::updLoop).add(loopMs);
+        dec::account(present, loopMs, t1);
     }
 };

@@ -12,6 +12,7 @@ A [Geode](https://geode-sdk.org) mod for Geometry Dash that defends your frame r
 | Decoupled display (experimental) | off | Update runs every loop, scene is drawn/presented only at Display Hz. VSync is turned off. Physics is not hooked. |
 | Display Hz | 0 (auto) | Present rate for Decoupled display. |
 | Logic FPS cap | 0 (unlimited) | Update rate for Decoupled display. Unlimited uses a full CPU core. |
+| Draw budget (%) | 75 | Decoupled display only. Max share of time drawing may take; 0 = off. |
 | Batch fast path | on | Skips clean sprites in `CCSpriteBatchNode::draw`. Verifies field offsets every 64 draws and disables itself for the session on mismatch. |
 | Visibility throttle (ms) | 0 (off) | Experimental. Runs `updateVisibility` at most once per interval. |
 | Debug log | off | FPS, frame time avg/max, fast-batch skip ratio, throttle counters, physics checksum. |
