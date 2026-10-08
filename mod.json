@@ -3,7 +3,7 @@
     "gd": {
         "win": "2.2081"
     },
-    "version": "v1.0.0",
+    "version": "v1.0.1",
     "id": "hornlime1217.frame-guard",
     "name": "Frame Guard",
     "developer": "Hornlime1217",
@@ -12,19 +12,19 @@
         "unlimited-fps": {
             "type": "bool",
             "name": "Unlimited FPS",
-            "description": "Removes the FPS cap and turns VSync off. Turning this off restores GD's own frame interval; restart the game to get GD's VSync setting back.",
-            "default": true
+            "description": "Removes the FPS cap and turns VSync off. Off by default, so GD's own FPS limit applies. Turn it on if you want uncapped FPS (more CPU/GPU load and heat). After turning it off, restart the game to get VSync back.",
+            "default": false
         },
         "fast-batch": {
             "type": "bool",
-            "name": "Batch fast path",
-            "description": "Skips clean sprites in CCSpriteBatchNode::draw. Verifies its memory offsets at runtime and switches itself off for the session on any mismatch.",
+            "name": "Batch fast path (recommended)",
+            "description": "Skips redundant per-frame work for sprites that did not change, which helps in levels with many objects. Safe to leave on: it checks itself while running and turns itself off for the session if the check fails. Does not change gameplay or physics.",
             "default": true
         },
         "vis-throttle-ms": {
             "type": "float",
             "name": "[Experimental] Visibility throttle (ms)",
-            "description": "0 = off. Runs updateVisibility at most once per interval. A physics step is 4.17 ms (240 Hz): 5 = every 2nd step, 10 = every 3rd. Physics results are not proven identical in every level; use the debug checksum to compare.",
+            "description": "Leave at 0 (off) unless you want to experiment. Above 0, the game updates which objects are visible less often to save time. Physics are not proven identical in every level, so do not use it for legit runs.",
             "default": 0.0,
             "min": 0.0,
             "max": 100.0
@@ -32,15 +32,15 @@
         "vis-camera-delta": {
             "type": "float",
             "name": "Throttle camera limit (units)",
-            "description": "While the throttle is active, updateVisibility still runs immediately if the camera moves this far or zoom/rotation changes.",
+            "description": "Only used when the visibility throttle above is greater than 0. If the camera jumps by this much, visibility updates immediately.",
             "default": 20.0,
             "min": 1.0,
             "max": 200.0
         },
         "debug-log": {
             "type": "bool",
-            "name": "Debug log",
-            "description": "Every 2 seconds logs FPS, frame time avg/max, fast-batch skip ratio and throttle counters. Also logs a physics checksum for throttle testing. Leave off for normal play.",
+            "name": "Debug log (for bug reports)",
+            "description": "Writes FPS and performance info to the Geode log every 2 seconds. Leave off unless you are asked to send a log.",
             "default": false
         }
     }

@@ -1,3 +1,7 @@
+# v1.0.1
+- Unlimited FPS is now off by default, so GD's own FPS limit applies unless you turn it on.
+- Clearer setting names and descriptions.
+
 # v1.0.0
-- Initial release as Frame Guard (formerly an internal "GD Optimizer" prototype).
+- Initial release as Frame Guard.
 - Unlimited FPS toggle, batch fast path, experimental visibility throttle, optional debug log.

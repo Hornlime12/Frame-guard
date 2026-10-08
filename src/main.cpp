@@ -22,7 +22,7 @@ using clk = std::chrono::steady_clock;
 // Settings (cached; updated by listeners, never polled in hot paths)
 // ---------------------------------------------------------------------------
 namespace cfg {
-    static std::atomic<bool> unlimitedFps{true};
+    static std::atomic<bool> unlimitedFps{false};
     static std::atomic<bool> fastBatch{true};
     static std::atomic<bool> debug{false};
     static std::atomic<double> visThrottleMs{0.0};

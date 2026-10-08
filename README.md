@@ -8,7 +8,7 @@ A [Geode](https://geode-sdk.org) mod for Geometry Dash that defends your frame r
 
 | Setting | Default | What it does |
 |---|---|---|
-| Unlimited FPS | on | Removes the FPS cap and turns VSync off. Off restores GD's own interval (restart to restore VSync). |
+| Unlimited FPS | off | Removes the FPS cap and turns VSync off. Off restores GD's own interval (restart to restore VSync). |
 | Batch fast path | on | Skips clean sprites in `CCSpriteBatchNode::draw`. Verifies field offsets every 64 draws and disables itself for the session on mismatch. |
 | Visibility throttle (ms) | 0 (off) | Experimental. Runs `updateVisibility` at most once per interval. |
 | Debug log | off | FPS, frame time avg/max, fast-batch skip ratio, throttle counters, physics checksum. |
