@@ -1,8 +1,13 @@
+# v1.3.1
+- Removed the Draw budget, Lean particles, Visibility throttle and Throttle camera limit options. Only SubFPS mode, Lean update, the batch fast path and the debug log remain. Old settings are not migrated.
+- Debug log no longer shows vis-throttle, draw estimate and budget-held values.
+
 # v1.3.0
 - Renamed Fixed tick to SubFPS mode (setting `SubFPS` = game updates per second). It does not change physics: GD stays at 240 steps/s. Maximum raised to 100000; the loop itself tops out around 20000-40000 updates/s.
-- Removed Unlimited FPS, Decoupled display, Logic FPS cap, Draw budget, Visibility throttle (and its camera limit) and Lean particles. Only SubFPS mode, Lean update, the batch fast path and the debug log remain. Old settings are not migrated.
+- Removed Unlimited FPS, Decoupled display and Logic FPS cap. Only SubFPS mode, its optimizations, the batch fast path, the visibility throttle and the debug log remain. Old settings are not migrated.
 - Fixed SubFPS slowing the game at high rates: the catch-up limit was a fixed 16 ticks (17 ms at 960), so a slow frame made the clock drop time. It is now 100 ms regardless of rate.
 - New Lean update (default on): updates that present no frame skip the draw pipeline; the progress bar and percentage refresh on the next presented frame.
+- New Lean particles (experimental, default off).
 - New Show SubFPS counter overlay.
 - Debug log shows lean update count and level update / postUpdate / visibility time per update.
 
