@@ -15,7 +15,7 @@ jobs:
         uses: geode-sdk/build-geode-mod@main
         with:
           combine: true
-          target: Win
+          target: Win64
 
   package:
     name: Package
