@@ -1,0 +1,47 @@
+{
+    "geode": "5.10.1",
+    "gd": {
+        "win": "2.2081"
+    },
+    "version": "v1.0.0",
+    "id": "Hornlime1217.frame-guard",
+    "name": "Frame Guard",
+    "developer": "Hornlime1217",
+    "description": "Defends your frame rate in heavy levels: unlimited FPS toggle and a self-verifying batch draw fast path.",
+    "settings": {
+        "unlimited-fps": {
+            "type": "bool",
+            "name": "Unlimited FPS",
+            "description": "Removes the FPS cap and turns VSync off. Turning this off restores GD's own frame interval; restart the game to get GD's VSync setting back.",
+            "default": true
+        },
+        "fast-batch": {
+            "type": "bool",
+            "name": "Batch fast path",
+            "description": "Skips clean sprites in CCSpriteBatchNode::draw. Verifies its memory offsets at runtime and switches itself off for the session on any mismatch.",
+            "default": true
+        },
+        "vis-throttle-ms": {
+            "type": "float",
+            "name": "[Experimental] Visibility throttle (ms)",
+            "description": "0 = off. Runs updateVisibility at most once per interval. A physics step is 4.17 ms (240 Hz): 5 = every 2nd step, 10 = every 3rd. Physics results are not proven identical in every level; use the debug checksum to compare.",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 100.0
+        },
+        "vis-camera-delta": {
+            "type": "float",
+            "name": "Throttle camera limit (units)",
+            "description": "While the throttle is active, updateVisibility still runs immediately if the camera moves this far or zoom/rotation changes.",
+            "default": 20.0,
+            "min": 1.0,
+            "max": 200.0
+        },
+        "debug-log": {
+            "type": "bool",
+            "name": "Debug log",
+            "description": "Every 2 seconds logs FPS, frame time avg/max, fast-batch skip ratio and throttle counters. Also logs a physics checksum for throttle testing. Leave off for normal play.",
+            "default": false
+        }
+    }
+}
