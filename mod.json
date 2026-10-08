@@ -37,14 +37,6 @@
             "min": 0,
             "max": 1000
         },
-        "draw-budget": {
-            "type": "int",
-            "name": "Draw budget (%)",
-            "description": "SubFPS mode only. Limits how much of the time drawing may use. In very heavy levels slow draws are spaced out so the game update keeps its pace. 0 = off. Lower = steadier updates but a lower on-screen frame rate in heavy levels.",
-            "default": 75,
-            "min": 0,
-            "max": 95
-        },
         "menu-fps": {
             "type": "int",
             "name": "Menu FPS cap",
@@ -59,33 +51,11 @@
             "description": "SubFPS mode only. Updates that present no frame skip the whole draw pipeline and the progress bar refresh and run only the game update. Physics is not touched.",
             "default": true
         },
-        "lean-particles": {
-            "type": "bool",
-            "name": "Lean particles (experimental)",
-            "description": "SubFPS mode only. Particle systems are only simulated when a frame is presented, with the skipped time handed back at once. Can help in particle-heavy levels; turn off if particles look wrong.",
-            "default": false
-        },
         "fast-batch": {
             "type": "bool",
             "name": "Batch fast path (recommended)",
             "description": "Skips redundant per-frame work for sprites that did not change, which helps in levels with many objects. Safe to leave on: it checks itself while running and turns itself off for the session if the check fails. Does not change gameplay or physics.",
             "default": true
-        },
-        "vis-throttle-ms": {
-            "type": "float",
-            "name": "[Experimental] Visibility throttle (ms)",
-            "description": "Leave at 0 (off) unless you want to experiment. Above 0, the game updates which objects are visible less often to save time. Physics are not proven identical in every level, so do not use it for legit runs.",
-            "default": 0.0,
-            "min": 0.0,
-            "max": 100.0
-        },
-        "vis-camera-delta": {
-            "type": "float",
-            "name": "Throttle camera limit (units)",
-            "description": "Only used when the visibility throttle above is greater than 0. If the camera jumps by this much, visibility updates immediately.",
-            "default": 20.0,
-            "min": 1.0,
-            "max": 200.0
         },
         "debug-log": {
             "type": "bool",
