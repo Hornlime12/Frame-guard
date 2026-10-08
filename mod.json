@@ -3,47 +3,67 @@
     "gd": {
         "win": "2.2081"
     },
-    "version": "v1.1.1",
+    "version": "v1.3.0",
     "id": "hornlime1217.frame-guard",
     "name": "Frame Guard",
     "developer": "Hornlime1217",
-    "description": "Defends your frame rate in heavy levels: unlimited FPS toggle and a self-verifying batch draw fast path.",
+    "description": "SubFPS: runs the game update at a fixed rate independent of the drawn frame rate, plus update-path optimizations and a self-verifying batch draw fast path.",
     "settings": {
-        "unlimited-fps": {
+        "subfps-mode": {
             "type": "bool",
-            "name": "Unlimited FPS",
-            "description": "Removes the FPS cap and turns VSync off. Off by default, so GD's own FPS limit applies. Turn it on if you want uncapped FPS (more CPU/GPU load and heat). After turning it off, restart the game to get VSync back.",
+            "name": "SubFPS mode",
+            "description": "In levels, runs the game update exactly 'SubFPS' times per second on a precise clock with a constant time step, and draws the screen only at Display Hz. This is NOT a physics or TPS change: GD's physics stays at 240 steps/s and its code is not touched. Keeps update timing perfectly even so Click-Between-Frames behaves the same at any refresh rate. Turns VSync off.",
             "default": false
         },
-        "decoupled-mode": {
+        "subfps": {
+            "type": "int",
+            "name": "SubFPS",
+            "description": "Game updates per second in SubFPS mode. 240 matches the physics rate; use a multiple of 240. Above 240 only keeps the shown state and input handling fresher, it does not make physics finer. The loop tops out around 20000-40000 updates/s, so higher values just mean as fast as possible (high CPU use). 1000-4000 is a sensible range.",
+            "default": 240,
+            "min": 60,
+            "max": 100000
+        },
+        "show-subfps": {
             "type": "bool",
-            "name": "Decoupled display (experimental)",
-            "description": "The game keeps updating every loop (physics is untouched), but the screen is only drawn at your monitor refresh rate. Turns VSync off and uses your Display Hz setting for pacing. Uses a lot of CPU unless you set a Logic FPS cap. Do not use together with other frame-pacing mods.",
+            "name": "Show SubFPS counter",
+            "description": "Shows the executed update rate as 'N SubFPS' in the top-right corner of a level. The game's own FPS counter only counts presented frames.",
             "default": false
         },
         "display-hz": {
             "type": "int",
             "name": "Display Hz",
-            "description": "Draw rate for Decoupled display. 0 = auto-detect the primary monitor's refresh rate.",
+            "description": "Draw rate in SubFPS mode. 0 = auto-detect the primary monitor's refresh rate.",
             "default": 0,
             "min": 0,
             "max": 1000
         },
-        "logic-fps": {
-            "type": "int",
-            "name": "Logic FPS cap",
-            "description": "Update rate for Decoupled display. 0 = unlimited (uses a full CPU core). Setting a value such as 960 saves CPU but makes draw timing up to one logic frame late.",
-            "default": 0,
-            "min": 0,
-            "max": 10000
-        },
         "draw-budget": {
             "type": "int",
             "name": "Draw budget (%)",
-            "description": "Decoupled display only. Limits how much of the time drawing may use. In very heavy levels slow draws are spaced out so the game update (inputs, physics timing) keeps running fast instead of dropping to the draw rate. 0 = off. Lower = smoother game update but a lower on-screen frame rate in heavy levels.",
+            "description": "SubFPS mode only. Limits how much of the time drawing may use. In very heavy levels slow draws are spaced out so the game update keeps its pace. 0 = off. Lower = steadier updates but a lower on-screen frame rate in heavy levels.",
             "default": 75,
             "min": 0,
             "max": 95
+        },
+        "menu-fps": {
+            "type": "int",
+            "name": "Menu FPS cap",
+            "description": "FPS cap outside levels (lobby, menus) while SubFPS mode is on. 0 = very high.",
+            "default": 1000,
+            "min": 0,
+            "max": 99999
+        },
+        "lean-update": {
+            "type": "bool",
+            "name": "Lean update ticks",
+            "description": "SubFPS mode only. Updates that present no frame skip the whole draw pipeline and the progress bar refresh and run only the game update. Physics is not touched.",
+            "default": true
+        },
+        "lean-particles": {
+            "type": "bool",
+            "name": "Lean particles (experimental)",
+            "description": "SubFPS mode only. Particle systems are only simulated when a frame is presented, with the skipped time handed back at once. Can help in particle-heavy levels; turn off if particles look wrong.",
+            "default": false
         },
         "fast-batch": {
             "type": "bool",
